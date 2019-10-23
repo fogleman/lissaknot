@@ -183,8 +183,8 @@ func main() {
 		fx := int(a[0])
 		fy := int(a[1])
 		fz := int(a[2])
-		px := a[3] / (2 * math.Pi)
-		py := a[4] / (2 * math.Pi)
+		px := a[3] / phaseDivisor
+		py := a[4] / phaseDivisor
 		k := Knot{fx, fy, fz, px, py, 0}
 		mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
 		mesh.SaveSTL("out.stl")
