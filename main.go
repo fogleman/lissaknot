@@ -99,7 +99,18 @@ func NewRandomKnot(maxFrequency, phaseDivisor int) *Knot {
 	}
 	ps := bestPhaseShifts(fx, fy, fz, phaseDivisor)
 	p := ps[rand.Intn(len(ps))]
-	return &Knot{fx, fy, fz, p.X, p.Y, 0}
+	px := p.X
+	py := p.Y
+
+	// for {
+	// 	px = rand.Float64()
+	// 	py = rand.Float64()
+	// 	if phaseScore(fx, fy, fz, px, py, 0) < 0.5 {
+	// 		break
+	// 	}
+	// }
+
+	return &Knot{fx, fy, fz, px, py, 0}
 }
 
 func (k *Knot) Score() float64 {
@@ -161,14 +172,25 @@ func (k *Knot) Mesh(r float64, n, m int) *Mesh {
 }
 
 func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return !info.IsDir()
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
 }
 
 func main() {
+	args := os.Args[1:]
+	if len(args) == 5 {
+		a := ParseFloats(args)
+		fx := int(a[0])
+		fy := int(a[1])
+		fz := int(a[2])
+		px := a[3] / (2 * math.Pi)
+		py := a[4] / (2 * math.Pi)
+		k := Knot{fx, fy, fz, px, py, 0}
+		mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
+		mesh.SaveSTL("out.stl")
+		fmt.Println(k.Score())
+		return
+	}
 	for {
 		k := NewRandomKnot(maxFrequency, phaseDivisor)
 		fx := k.FrequencyX
