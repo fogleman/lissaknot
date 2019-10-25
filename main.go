@@ -152,30 +152,29 @@ func (k *Knot) At(t float64) Vector {
 	return Vector{x, y, z}
 }
 
-// DirectionAt returns the curve gradient at time t
-func (k *Knot) DirectionAt(t float64) Vector {
-	const eps = 1e-9
-	a := k.At(t - eps)
-	b := k.At(t + eps)
-	return b.Sub(a).Normalize()
+// DerivativeAt returns the first derivative at time t
+func (k *Knot) DerivativeAt(t float64) Vector {
+	x := -math.Sin(float64(k.FrequencyX)*t + k.PhaseShiftX*2*math.Pi)
+	y := -math.Sin(float64(k.FrequencyY)*t + k.PhaseShiftY*2*math.Pi)
+	z := -math.Sin(float64(k.FrequencyZ)*t + k.PhaseShiftZ*2*math.Pi)
+	return Vector{x, y, z}.Normalize()
 }
 
 // CrossSectionAt computes the cross-sectional profile of the tube at time t
 // the points are stored in the `result` buffer
-// the new `up` vector is returned
-func (k *Knot) CrossSectionAt(t, r float64, n int, up Vector, result []Vector) Vector {
+func (k *Knot) CrossSectionAt(t, r float64, n int, result []Vector) {
 	p := k.At(t)
-	w := k.DirectionAt(t)
+	up := p.Normalize().Negate()
+	w := k.DerivativeAt(t)
 	u := up.Cross(w).Normalize()
 	v := w.Cross(u)
 	for i := range result {
 		a := 2 * math.Pi * float64(i) / float64(n)
 		q := p
 		q = q.Add(u.MulScalar(math.Cos(a) * r))
-		q = q.Add(v.MulScalar(math.Sin(a) * r))
+		q = q.Add(v.MulScalar(math.Sin(a) * r / 2))
 		result[i] = q
 	}
-	return v
 }
 
 // Mesh computes a 3D mesh for this Knot
@@ -186,11 +185,10 @@ func (k *Knot) Mesh(r float64, n, m int) *Mesh {
 	triangles := make([]*Triangle, 0, (n+1)*m*2)
 	c0 := make([]Vector, m)
 	c1 := make([]Vector, m)
-	up := k.DirectionAt(0).Perpendicular()
-	up = k.CrossSectionAt(0, r, m, up, c0)
+	k.CrossSectionAt(0, r, m, c0)
 	for i := 0; i < n; i++ {
 		t := float64(i+1) / float64(n) * 2 * math.Pi
-		up = k.CrossSectionAt(t, r, m, up, c1)
+		k.CrossSectionAt(t, r, m, c1)
 		for j0 := 0; j0 < m; j0++ {
 			j1 := (j0 + 1) % m
 			v00 := c0[j0]
