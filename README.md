@@ -8,9 +8,13 @@ Simple Go program to create 3D models (STLs) of [Lissajous knots](https://en.wik
 
 ### Usage
 
-Running the program simply generates random knots and saves them to disk. See the [source](https://github.com/fogleman/lissaknot/blob/master/main.go) for more details.
+Running the program with no arguments generates random knots and saves them to disk. See the [source](https://github.com/fogleman/lissaknot/blob/master/main.go) for more details.
 
     $ go run main.go
+
+You can also specify knot parameters to generate a single knot STL:
+
+    $ go run main.go fx fy fz [px py]
 
 ### Examples
 
