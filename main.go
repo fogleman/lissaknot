@@ -26,9 +26,13 @@ func gcd(a, b int) int {
 }
 
 func validFrequencies(fx, fy, fz int) bool {
+	// knots cannot be self-intersecting
+	// so all frequency pairs must be co-prime
 	return gcd(fx, fy) == 1 && gcd(fx, fz) == 1 && gcd(fy, fz) == 1
 }
 
+// randomValidFrequencies returns random frequencies for x, y, and z
+// the frequencies are pairwise co-prime and are in [1, maxFrequency]
 func randomValidFrequencies(maxFrequency int) (fx, fy, fz int) {
 	for {
 		fx = rand.Intn(maxFrequency) + 1
@@ -40,7 +44,16 @@ func randomValidFrequencies(maxFrequency int) (fx, fy, fz int) {
 	}
 }
 
+// phaseScore returns a measure of how close to self-intersecting the knot
+// with the specified parameters will be (lower is better)
 func phaseScore(fx, fy, fz int, px, py, pz float64) float64 {
+	// the following quantities may not be integer multiples of pi
+	//   fx * py - fy * px
+	//   fy * pz - fz * py
+	//   fz * px - fx * pz
+	// this "score" computes how far away from being a multiple these
+	// quantities are, as a measure of how close to self-intersecting
+	// the knot will be
 	ffx := float64(fx)
 	ffy := float64(fy)
 	ffz := float64(fz)
@@ -56,6 +69,8 @@ func phaseScore(fx, fy, fz int, px, py, pz float64) float64 {
 	return q1 + q2 + q3
 }
 
+// bestPhaseShifts returns a list of (px, py) tuples representing
+// phase shifts with the best score (multiple results in case of ties)
 func bestPhaseShifts(fx, fy, fz, divisor int) []Vector {
 	var result []Vector
 	var best = 1e9
@@ -80,12 +95,12 @@ func bestPhaseShifts(fx, fy, fz, divisor int) []Vector {
 }
 
 type Knot struct {
-	FrequencyX int
-	FrequencyY int
-	FrequencyZ int
-	PhaseX     float64
-	PhaseY     float64
-	PhaseZ     float64
+	FrequencyX  int
+	FrequencyY  int
+	FrequencyZ  int
+	PhaseShiftX float64
+	PhaseShiftY float64
+	PhaseShiftZ float64
 }
 
 func NewKnot(fx, fy, fz int, px, py, pz float64) *Knot {
@@ -93,16 +108,23 @@ func NewKnot(fx, fy, fz int, px, py, pz float64) *Knot {
 }
 
 func NewRandomKnot(maxFrequency, phaseDivisor int) *Knot {
+	// pick some random frequencies
 	fx, fy, fz := randomValidFrequencies(maxFrequency)
+
+	// normalize X and Y order
+	// (Z is special as we force its phase shift to zero below)
 	if fy < fx {
 		fx, fy = fy, fx
 	}
 
+	// find best phase shifts for these frequencies
 	ps := bestPhaseShifts(fx, fy, fz, phaseDivisor)
 	p := ps[rand.Intn(len(ps))]
 	px := p.X
 	py := p.Y
 
+	// sometimes it may be desireable to use other phase shifts
+	// in that case the code below may be used instead
 	// for {
 	// 	// px = rand.Float64()
 	// 	// py = rand.Float64()
@@ -119,16 +141,18 @@ func NewRandomKnot(maxFrequency, phaseDivisor int) *Knot {
 func (k *Knot) Score() float64 {
 	return phaseScore(
 		k.FrequencyX, k.FrequencyY, k.FrequencyZ,
-		k.PhaseX, k.PhaseY, k.PhaseZ)
+		k.PhaseShiftX, k.PhaseShiftY, k.PhaseShiftZ)
 }
 
+// At returns the X, Y, Z position of the curve at time t
 func (k *Knot) At(t float64) Vector {
-	x := math.Cos(float64(k.FrequencyX)*t + k.PhaseX*2*math.Pi)
-	y := math.Cos(float64(k.FrequencyY)*t + k.PhaseY*2*math.Pi)
-	z := math.Cos(float64(k.FrequencyZ)*t + k.PhaseZ*2*math.Pi)
+	x := math.Cos(float64(k.FrequencyX)*t + k.PhaseShiftX*2*math.Pi)
+	y := math.Cos(float64(k.FrequencyY)*t + k.PhaseShiftY*2*math.Pi)
+	z := math.Cos(float64(k.FrequencyZ)*t + k.PhaseShiftZ*2*math.Pi)
 	return Vector{x, y, z}
 }
 
+// DirectionAt returns the curve gradient at time t
 func (k *Knot) DirectionAt(t float64) Vector {
 	const eps = 1e-9
 	a := k.At(t - eps)
@@ -136,6 +160,9 @@ func (k *Knot) DirectionAt(t float64) Vector {
 	return b.Sub(a).Normalize()
 }
 
+// CrossSectionAt computes the cross-sectional profile of the tube at time t
+// the points are stored in the `result` buffer
+// the new `up` vector is returned
 func (k *Knot) CrossSectionAt(t, r float64, n int, up Vector, result []Vector) Vector {
 	p := k.At(t)
 	w := k.DirectionAt(t)
@@ -151,6 +178,10 @@ func (k *Knot) CrossSectionAt(t, r float64, n int, up Vector, result []Vector) V
 	return v
 }
 
+// Mesh computes a 3D mesh for this Knot
+// r = tube radius
+// n = number of slices from 0 to 2 pi
+// m = number of cross section points per slice
 func (k *Knot) Mesh(r float64, n, m int) *Mesh {
 	triangles := make([]*Triangle, 0, (n+1)*m*2)
 	c0 := make([]Vector, m)
@@ -178,8 +209,8 @@ func (k *Knot) Name() string {
 	fx := k.FrequencyX
 	fy := k.FrequencyY
 	fz := k.FrequencyZ
-	px := int(math.Round(k.PhaseX * phaseDivisor))
-	py := int(math.Round(k.PhaseY * phaseDivisor))
+	px := int(math.Round(k.PhaseShiftX * phaseDivisor))
+	py := int(math.Round(k.PhaseShiftY * phaseDivisor))
 	return fmt.Sprintf("%d.%d.%d.%d.%d", fx, fy, fz, px, py)
 }
 
