@@ -94,6 +94,12 @@ func bestPhaseShifts(fx, fy, fz, divisor int) []Vector {
 	return result
 }
 
+func randomPhaseShifts(fx, fy, fz, divisor int) (px, py float64) {
+	ps := bestPhaseShifts(fx, fy, fz, phaseDivisor)
+	p := ps[rand.Intn(len(ps))]
+	return p.X, p.Y
+}
+
 type Knot struct {
 	FrequencyX  int
 	FrequencyY  int
@@ -118,10 +124,7 @@ func NewRandomKnot(maxFrequency, phaseDivisor int) *Knot {
 	}
 
 	// find best phase shifts for these frequencies
-	ps := bestPhaseShifts(fx, fy, fz, phaseDivisor)
-	p := ps[rand.Intn(len(ps))]
-	px := p.X
-	py := p.Y
+	px, py := randomPhaseShifts(fx, fy, fz, phaseDivisor)
 
 	// sometimes it may be desireable to use other phase shifts
 	// in that case the code below may be used instead
@@ -200,6 +203,7 @@ func (k *Knot) Mesh(r float64, n, m int) *Mesh {
 		}
 		copy(c0, c1)
 	}
+
 	return NewTriangleMesh(triangles)
 }
 
@@ -219,20 +223,7 @@ func fileExists(path string) bool {
 
 func main() {
 	args := os.Args[1:]
-	if len(args) == 5 {
-		a := ParseFloats(args)
-		fx := int(a[0])
-		fy := int(a[1])
-		fz := int(a[2])
-		px := a[3] / phaseDivisor
-		py := a[4] / phaseDivisor
-		k := Knot{fx, fy, fz, px, py, 0}
-		name := k.Name()
-		mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
-		path := name + ".stl"
-		mesh.SaveSTL(path)
-		fmt.Println(name, k.Score())
-	} else {
+	if len(args) == 0 {
 		for {
 			k := NewRandomKnot(maxFrequency, phaseDivisor)
 			name := k.Name()
@@ -246,4 +237,24 @@ func main() {
 			fmt.Println(name, k.Score())
 		}
 	}
+
+	a := ParseFloats(args)
+	fx := int(a[0])
+	fy := int(a[1])
+	fz := int(a[2])
+
+	var px, py float64
+	if len(args) > 3 {
+		px = a[3] / phaseDivisor
+		py = a[4] / phaseDivisor
+	} else {
+		px, py = randomPhaseShifts(fx, fy, fz, phaseDivisor)
+	}
+
+	k := Knot{fx, fy, fz, px, py, 0}
+	name := k.Name()
+	mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
+	path := name + ".stl"
+	mesh.SaveSTL(path)
+	fmt.Println(name, k.Score())
 }
