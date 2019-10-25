@@ -97,15 +97,18 @@ func NewRandomKnot(maxFrequency, phaseDivisor int) *Knot {
 	if fy < fx {
 		fx, fy = fy, fx
 	}
+
 	ps := bestPhaseShifts(fx, fy, fz, phaseDivisor)
 	p := ps[rand.Intn(len(ps))]
 	px := p.X
 	py := p.Y
 
 	// for {
-	// 	px = rand.Float64()
-	// 	py = rand.Float64()
-	// 	if phaseScore(fx, fy, fz, px, py, 0) < 0.5 {
+	// 	// px = rand.Float64()
+	// 	// py = rand.Float64()
+	// 	px = float64(rand.Intn(phaseDivisor)) / float64(phaseDivisor)
+	// 	py = float64(rand.Intn(phaseDivisor)) / float64(phaseDivisor)
+	// 	if phaseScore(fx, fy, fz, px, py, 0) < 1 {
 	// 		break
 	// 	}
 	// }
@@ -171,6 +174,15 @@ func (k *Knot) Mesh(r float64, n, m int) *Mesh {
 	return NewTriangleMesh(triangles)
 }
 
+func (k *Knot) Name() string {
+	fx := k.FrequencyX
+	fy := k.FrequencyY
+	fz := k.FrequencyZ
+	px := int(math.Round(k.PhaseX * phaseDivisor))
+	py := int(math.Round(k.PhaseY * phaseDivisor))
+	return fmt.Sprintf("%d.%d.%d.%d.%d", fx, fy, fz, px, py)
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
@@ -186,26 +198,23 @@ func main() {
 		px := a[3] / phaseDivisor
 		py := a[4] / phaseDivisor
 		k := Knot{fx, fy, fz, px, py, 0}
+		name := k.Name()
 		mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
-		mesh.SaveSTL("out.stl")
-		fmt.Println(k.Score())
-		return
-	}
-	for {
-		k := NewRandomKnot(maxFrequency, phaseDivisor)
-		fx := k.FrequencyX
-		fy := k.FrequencyY
-		fz := k.FrequencyZ
-		px := int(math.Round(k.PhaseX * phaseDivisor))
-		py := int(math.Round(k.PhaseY * phaseDivisor))
-		name := fmt.Sprintf("%d.%d.%d.%d.%d", fx, fy, fz, px, py)
 		path := name + ".stl"
-		if fileExists(path) {
-			fmt.Println("SKIP")
-			continue
-		}
-		mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
-		mesh.SaveSTL(name + ".stl")
+		mesh.SaveSTL(path)
 		fmt.Println(name, k.Score())
+	} else {
+		for {
+			k := NewRandomKnot(maxFrequency, phaseDivisor)
+			name := k.Name()
+			path := name + ".stl"
+			if fileExists(path) {
+				fmt.Println("SKIP")
+				continue
+			}
+			mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
+			mesh.SaveSTL(path)
+			fmt.Println(name, k.Score())
+		}
 	}
 }
