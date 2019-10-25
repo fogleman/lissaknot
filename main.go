@@ -165,33 +165,28 @@ func (k *Knot) DerivativeAt(t float64) Vector {
 
 // CrossSectionAt computes the cross-sectional profile of the tube at time t
 // the points are stored in the `result` buffer
-func (k *Knot) CrossSectionAt(t, r float64, n int, result []Vector) {
+func (k *Knot) CrossSectionAt(t float64, profile, result []Vector) {
 	p := k.At(t)
-	up := p.Normalize().Negate()
+	up := p.Normalize()
 	w := k.DerivativeAt(t)
 	u := up.Cross(w).Normalize()
 	v := w.Cross(u)
-	for i := range result {
-		a := 2 * math.Pi * float64(i) / float64(n)
-		q := p
-		q = q.Add(u.MulScalar(math.Cos(a) * r))
-		q = q.Add(v.MulScalar(math.Sin(a) * r / 2))
-		result[i] = q
+	for i, d := range profile {
+		result[i] = p.Add(u.MulScalar(d.X)).Add(v.MulScalar(d.Y))
 	}
 }
 
 // Mesh computes a 3D mesh for this Knot
-// r = tube radius
 // n = number of slices from 0 to 2 pi
-// m = number of cross section points per slice
-func (k *Knot) Mesh(r float64, n, m int) *Mesh {
+func (k *Knot) Mesh(n int, profile []Vector) *Mesh {
+	m := len(profile)
 	triangles := make([]*Triangle, 0, (n+1)*m*2)
 	c0 := make([]Vector, m)
 	c1 := make([]Vector, m)
-	k.CrossSectionAt(0, r, m, c0)
+	k.CrossSectionAt(0, profile, c0)
 	for i := 0; i < n; i++ {
 		t := float64(i+1) / float64(n) * 2 * math.Pi
-		k.CrossSectionAt(t, r, m, c1)
+		k.CrossSectionAt(t, profile, c1)
 		for j0 := 0; j0 < m; j0++ {
 			j1 := (j0 + 1) % m
 			v00 := c0[j0]
@@ -216,12 +211,24 @@ func (k *Knot) Name() string {
 	return fmt.Sprintf("%d.%d.%d.%d.%d", fx, fy, fz, px, py)
 }
 
+func ellipticalProfile(n int, a0, rx, ry float64) []Vector {
+	result := make([]Vector, n)
+	for i := 0; i < n; i++ {
+		a := a0 + float64(i)/float64(n)*2*math.Pi
+		result[i].X = math.Cos(a) * rx
+		result[i].Y = math.Sin(a) * ry
+	}
+	return result
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
 }
 
 func main() {
+	profile := ellipticalProfile(tubeSectionSteps, 0, tubeRadius, tubeRadius)
+
 	args := os.Args[1:]
 	if len(args) == 0 {
 		for {
@@ -232,7 +239,7 @@ func main() {
 				fmt.Println("SKIP")
 				continue
 			}
-			mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
+			mesh := k.Mesh(tubeSteps, profile)
 			mesh.SaveSTL(path)
 			fmt.Println(name, k.Score())
 		}
@@ -253,7 +260,7 @@ func main() {
 
 	k := Knot{fx, fy, fz, px, py, 0}
 	name := k.Name()
-	mesh := k.Mesh(tubeRadius, tubeSteps, tubeSectionSteps)
+	mesh := k.Mesh(tubeSteps, profile)
 	path := name + ".stl"
 	mesh.SaveSTL(path)
 	fmt.Println(name, k.Score())
