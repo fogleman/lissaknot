@@ -147,16 +147,16 @@ func (k *Knot) Score() float64 {
 		k.PhaseShiftX, k.PhaseShiftY, k.PhaseShiftZ)
 }
 
-// At returns the X, Y, Z position of the curve at time t
-func (k *Knot) At(t float64) Vector {
+// Position returns the X, Y, Z position of the curve at time t
+func (k *Knot) Position(t float64) Vector {
 	x := math.Cos(float64(k.FrequencyX)*t + k.PhaseShiftX*2*math.Pi)
 	y := math.Cos(float64(k.FrequencyY)*t + k.PhaseShiftY*2*math.Pi)
 	z := math.Cos(float64(k.FrequencyZ)*t + k.PhaseShiftZ*2*math.Pi)
 	return Vector{x, y, z}
 }
 
-// DerivativeAt returns the first derivative at time t
-func (k *Knot) DerivativeAt(t float64) Vector {
+// Derivative returns the first derivative at time t
+func (k *Knot) Derivative(t float64) Vector {
 	x := -math.Sin(float64(k.FrequencyX)*t + k.PhaseShiftX*2*math.Pi)
 	y := -math.Sin(float64(k.FrequencyY)*t + k.PhaseShiftY*2*math.Pi)
 	z := -math.Sin(float64(k.FrequencyZ)*t + k.PhaseShiftZ*2*math.Pi)
@@ -166,13 +166,13 @@ func (k *Knot) DerivativeAt(t float64) Vector {
 // CrossSectionAt computes the cross-sectional profile of the tube at time t
 // the points are stored in the `result` buffer
 func (k *Knot) CrossSectionAt(t float64, profile, result []Vector) {
-	p := k.At(t)
+	p := k.Position(t)
+	d := k.Derivative(t)
 	up := p.Normalize()
-	w := k.DerivativeAt(t)
-	u := up.Cross(w).Normalize()
-	v := w.Cross(u)
-	for i, d := range profile {
-		result[i] = p.Add(u.MulScalar(d.X)).Add(v.MulScalar(d.Y))
+	u := up.Cross(d).Normalize()
+	v := d.Cross(u)
+	for i, q := range profile {
+		result[i] = p.Add(u.MulScalar(q.X)).Add(v.MulScalar(q.Y))
 	}
 }
 
@@ -180,7 +180,7 @@ func (k *Knot) CrossSectionAt(t float64, profile, result []Vector) {
 // n = number of slices from 0 to 2 pi
 func (k *Knot) Mesh(n int, profile []Vector) *Mesh {
 	m := len(profile)
-	triangles := make([]*Triangle, 0, (n+1)*m*2)
+	triangles := make([]*Triangle, 0, n*m*2)
 	c0 := make([]Vector, m)
 	c1 := make([]Vector, m)
 	k.CrossSectionAt(0, profile, c0)
@@ -196,9 +196,8 @@ func (k *Knot) Mesh(n int, profile []Vector) *Mesh {
 			triangles = append(triangles, NewTriangleForPoints(v11, v10, v00))
 			triangles = append(triangles, NewTriangleForPoints(v01, v11, v00))
 		}
-		copy(c0, c1)
+		c1, c0 = c0, c1
 	}
-
 	return NewTriangleMesh(triangles)
 }
 
