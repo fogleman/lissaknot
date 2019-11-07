@@ -18,6 +18,48 @@ const (
 	tubeSectionSteps = 64
 )
 
+type Curve interface {
+	Position(t float64) Vector
+	Derivative(t float64) Vector
+}
+
+// CurveCrossSection computes the cross-sectional profile of the curve at time t
+// the points are stored in the `result` buffer
+func CurveCrossSection(c Curve, t float64, profile, result []Vector) {
+	p := c.Position(t)
+	d := c.Derivative(t)
+	up := p.Normalize()
+	u := up.Cross(d).Normalize()
+	v := d.Cross(u)
+	for i, q := range profile {
+		result[i] = p.Add(u.MulScalar(q.X)).Add(v.MulScalar(q.Y))
+	}
+}
+
+// CurveMesh computes a 3D mesh for the Curve
+// n = number of slices from 0 to 2 pi
+func CurveMesh(c Curve, n int, profile []Vector) *Mesh {
+	m := len(profile)
+	triangles := make([]*Triangle, 0, n*m*2)
+	c0 := make([]Vector, m)
+	c1 := make([]Vector, m)
+	CurveCrossSection(c, 0, profile, c0)
+	for i := 0; i < n; i++ {
+		t := float64(i+1) / float64(n)
+		CurveCrossSection(c, t, profile, c1)
+		for j0 := 0; j0 < m; j0++ {
+			j1 := (j0 + 1) % m
+			v00 := c0[j0]
+			v10 := c1[j0]
+			v01 := c0[j1]
+			v11 := c1[j1]
+			triangles = append(triangles, NewTriangleForPoints(v11, v10, v00))
+			triangles = append(triangles, NewTriangleForPoints(v01, v11, v00))
+		}
+		c1, c0 = c0, c1
+	}
+	return NewTriangleMesh(triangles)
+}
 func gcd(a, b int) int {
 	for b != 0 {
 		a, b = b, a%b
@@ -149,6 +191,7 @@ func (k *Knot) Score() float64 {
 
 // Position returns the X, Y, Z position of the curve at time t
 func (k *Knot) Position(t float64) Vector {
+	t *= 2 * math.Pi
 	x := math.Cos(float64(k.FrequencyX)*t + k.PhaseShiftX*2*math.Pi)
 	y := math.Cos(float64(k.FrequencyY)*t + k.PhaseShiftY*2*math.Pi)
 	z := math.Cos(float64(k.FrequencyZ)*t + k.PhaseShiftZ*2*math.Pi)
@@ -157,48 +200,11 @@ func (k *Knot) Position(t float64) Vector {
 
 // Derivative returns the first derivative at time t
 func (k *Knot) Derivative(t float64) Vector {
+	t *= 2 * math.Pi
 	x := -math.Sin(float64(k.FrequencyX)*t + k.PhaseShiftX*2*math.Pi)
 	y := -math.Sin(float64(k.FrequencyY)*t + k.PhaseShiftY*2*math.Pi)
 	z := -math.Sin(float64(k.FrequencyZ)*t + k.PhaseShiftZ*2*math.Pi)
 	return Vector{x, y, z}.Normalize()
-}
-
-// CrossSectionAt computes the cross-sectional profile of the tube at time t
-// the points are stored in the `result` buffer
-func (k *Knot) CrossSectionAt(t float64, profile, result []Vector) {
-	p := k.Position(t)
-	d := k.Derivative(t)
-	up := p.Normalize()
-	u := up.Cross(d).Normalize()
-	v := d.Cross(u)
-	for i, q := range profile {
-		result[i] = p.Add(u.MulScalar(q.X)).Add(v.MulScalar(q.Y))
-	}
-}
-
-// Mesh computes a 3D mesh for this Knot
-// n = number of slices from 0 to 2 pi
-func (k *Knot) Mesh(n int, profile []Vector) *Mesh {
-	m := len(profile)
-	triangles := make([]*Triangle, 0, n*m*2)
-	c0 := make([]Vector, m)
-	c1 := make([]Vector, m)
-	k.CrossSectionAt(0, profile, c0)
-	for i := 0; i < n; i++ {
-		t := float64(i+1) / float64(n) * 2 * math.Pi
-		k.CrossSectionAt(t, profile, c1)
-		for j0 := 0; j0 < m; j0++ {
-			j1 := (j0 + 1) % m
-			v00 := c0[j0]
-			v10 := c1[j0]
-			v01 := c0[j1]
-			v11 := c1[j1]
-			triangles = append(triangles, NewTriangleForPoints(v11, v10, v00))
-			triangles = append(triangles, NewTriangleForPoints(v01, v11, v00))
-		}
-		c1, c0 = c0, c1
-	}
-	return NewTriangleMesh(triangles)
 }
 
 func (k *Knot) Name() string {
@@ -208,6 +214,27 @@ func (k *Knot) Name() string {
 	px := int(math.Round(k.PhaseShiftX * phaseDivisor))
 	py := int(math.Round(k.PhaseShiftY * phaseDivisor))
 	return fmt.Sprintf("%d.%d.%d.%d.%d", fx, fy, fz, px, py)
+}
+
+type TrefoilKnot struct {
+}
+
+// Position returns the X, Y, Z position of the curve at time t
+func (k *TrefoilKnot) Position(t float64) Vector {
+	t *= 2 * math.Pi
+	x := math.Sin(t) + 2*math.Sin(2*t)
+	y := math.Cos(t) - 2*math.Cos(2*t)
+	z := -math.Sin(3 * t)
+	return Vector{x, y, z}
+}
+
+// Derivative returns the first derivative at time t
+func (k *TrefoilKnot) Derivative(t float64) Vector {
+	t *= 2 * math.Pi
+	x := math.Cos(t) + 4*math.Cos(2*t)
+	y := 4*math.Sin(2*t) - math.Sin(t)
+	z := -3 * math.Cos(3*t)
+	return Vector{x, y, z}.Normalize()
 }
 
 func ellipticalProfile(n int, a0, rx, ry float64) []Vector {
@@ -228,6 +255,13 @@ func fileExists(path string) bool {
 func main() {
 	profile := ellipticalProfile(tubeSectionSteps, 0, tubeRadius, tubeRadius)
 
+	// {
+	// 	k := &TrefoilKnot{}
+	// 	mesh := CurveMesh(k, tubeSteps, profile)
+	// 	mesh.SaveSTL("out.stl")
+	// 	return
+	// }
+
 	args := os.Args[1:]
 	if len(args) == 0 {
 		for {
@@ -238,7 +272,7 @@ func main() {
 				fmt.Println("SKIP")
 				continue
 			}
-			mesh := k.Mesh(tubeSteps, profile)
+			mesh := CurveMesh(k, tubeSteps, profile)
 			mesh.SaveSTL(path)
 			fmt.Println(name, k.Score())
 		}
@@ -257,9 +291,9 @@ func main() {
 		px, py = randomPhaseShifts(fx, fy, fz, phaseDivisor)
 	}
 
-	k := Knot{fx, fy, fz, px, py, 0}
+	k := &Knot{fx, fy, fz, px, py, 0}
 	name := k.Name()
-	mesh := k.Mesh(tubeSteps, profile)
+	mesh := CurveMesh(k, tubeSteps, profile)
 	path := name + ".stl"
 	mesh.SaveSTL(path)
 	fmt.Println(name, k.Score())
